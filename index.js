@@ -7,7 +7,8 @@
  */
 export function proxyHandle(proxy, options = { changeOrigin: true }) {
   return async function ({ event, resolve }) {
-    const { pathname } = event.url;
+    const { url, request } = event;
+    const { pathname } = url;
 
     /**
      * Find first matching path
@@ -21,15 +22,9 @@ export function proxyHandle(proxy, options = { changeOrigin: true }) {
       /**
        * Collect request headers
        */
-      const requestHeaders = {
-        accept: event.request.headers.get('accept'),
-        'user-agent': event.request.headers.get('user-agent'),
-        'accept-encoding': event.request.headers.get('user-agent'),
-        'accept-language': event.request.headers.get('user-agent'),
-        cookie: event.request.headers.get('cookie'),
-      };
-      if (options && !options.changeOrigin) {
-        requestHeaders.host = event.request.headers.get('host');
+      const requestHeaders = new Headers(request.headers);
+      if (options && options.changeOrigin) {
+        requestHeaders.delete('host');
       }
 
       if (options && options.debug) {
@@ -39,35 +34,42 @@ export function proxyHandle(proxy, options = { changeOrigin: true }) {
       /**
        * Fetch data from remote server
        */
-      const resp = await fetch(`${proxyTarget}${pathname}`, {
-        headers: requestHeaders,
-      });
+      try {
+        const response = await fetch(`${proxyTarget}${pathname}`, {
+          redirect: 'manual',
+          method: request.method,
+          headers: requestHeaders,
+        });
 
-      /**
-       * Clean up response headers
-       */
-      const responseHeaders = Object.fromEntries(resp.headers.entries());
-      delete responseHeaders['content-encoding'];
+        /**
+         * Clean up response headers
+         */
+        const responseHeaders = new Headers(response.headers);
+        responseHeaders.delete('content-encoding');
 
-      if (options && options.debug) {
-        console.debug(
-          `Proxy response (${resp.status}) headers:`,
-          responseHeaders,
-        );
+        if (options && options.debug) {
+          console.debug(
+            `Proxy response (${response.status}) headers:`,
+            responseHeaders,
+          );
+        }
+
+        /**
+         * Return response from remote server
+         */
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        console.error(error);
       }
-
-      /**
-       * Return response from remote server
-       */
-      return new Response(await resp.text(), {
-        headers: responseHeaders,
-      });
     }
 
     /**
      * Proceed without proxy
      */
-    const response = await resolve(event);
-    return response;
+    return await resolve(event);
   };
 }
