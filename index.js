@@ -8,7 +8,7 @@
 export function proxyHandle(proxy, options = { changeOrigin: true }) {
   return async function ({ event, resolve }) {
     const { url, request } = event;
-    const { pathname } = url;
+    const { pathname, search } = url;
 
     /**
      * Find first matching path
@@ -35,7 +35,7 @@ export function proxyHandle(proxy, options = { changeOrigin: true }) {
        * Fetch data from remote server
        */
       try {
-        const response = await fetch(`${proxyTarget}${pathname}`, {
+        const response = await fetch(`${proxyTarget}${pathname}${search}`, {
           redirect: 'manual',
           method: request.method,
           headers: requestHeaders,
